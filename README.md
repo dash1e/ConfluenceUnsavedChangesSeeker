@@ -46,4 +46,3 @@ python3 confluence_unsaved_changes_report.py \
 
 - "Site owner" is not consistently available via Confluence Cloud API token auth; the script reports this explicitly.
 - The report includes per-site status and detailed error text when API calls fail (e.g., auth/permission issues).
-- Draft detection uses `GET /wiki/rest/api/content?status=draft&type=page` and inspects `history.lastUpdated` to report the most recently updated draft editor/link.

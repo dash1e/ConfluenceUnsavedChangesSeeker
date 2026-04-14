@@ -78,51 +78,39 @@ def detect_site_owner(base_url: str, auth_header: str) -> str:
     return "Not exposed by Confluence API token"
 
 
-def parse_confluence_datetime(raw: str) -> datetime:
-    # Confluence usually returns RFC3339 timestamps such as 2026-04-14T07:55:10.123Z.
-    if raw.endswith("Z"):
-        raw = raw[:-1] + "+00:00"
-    return datetime.fromisoformat(raw)
-
-
 def fetch_latest_draft(base_url: str, auth_header: str) -> tuple[str, str, int]:
+    cql = "type=page AND status=draft ORDER BY lastmodified DESC"
     payload = api_get(
         base_url,
         auth_header,
-        "/wiki/rest/api/content",
+        "/wiki/rest/api/search",
         params={
-            "status": "draft",
-            "type": "page",
-            "limit": "250",
-            "expand": "history.lastUpdated",
+            "cql": cql,
+            "limit": "1",
+            "expand": "content.history.lastUpdated",
         },
     )
 
+    size = int(payload.get("size") or 0)
     results = payload.get("results") or []
-    draft_count = len(results)
-    if draft_count == 0:
+    if not results:
         return "No unsaved changes", "", 0
 
-    def draft_updated_at(item: dict[str, Any]) -> datetime:
-        when = (((item.get("history") or {}).get("lastUpdated") or {}).get("when") or "")
-        try:
-            return parse_confluence_datetime(when)
-        except Exception:
-            return datetime.min.replace(tzinfo=timezone.utc)
+    first = results[0]
+    content = first.get("content") or {}
 
-    latest = max(results, key=draft_updated_at)
     editor = (
-        ((latest.get("history") or {}).get("lastUpdated") or {}).get("by") or {}
+        ((content.get("history") or {}).get("lastUpdated") or {}).get("by") or {}
     ).get("displayName") or "Unknown"
 
-    webui = (latest.get("_links") or {}).get("webui")
+    webui = (content.get("_links") or {}).get("webui")
     if webui:
         link = f"{base_url}{webui}"
     else:
-        content_id = latest.get("id")
+        content_id = content.get("id")
         link = f"{base_url}/wiki/pages/viewpage.action?pageId={content_id}" if content_id else ""
 
-    return editor, link, draft_count
+    return editor, link, size
 
 
 def build_report(results: list[SiteResult]) -> str:
